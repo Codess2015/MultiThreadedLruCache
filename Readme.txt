@@ -1,49 +1,37 @@
-LRU multi-threaded Caching
+LRU Multi-Threaded Caching
 
-linked list and map
+Cache implementation using "Least Recently Used" Cache replacement policy. This algorithm solves the concurrent access
+problem for cache operations - get() and put() - while maintaining nearly constant runtime for the both operations.   
 
-lock contention
+Interface:  
+ICache defines the caching interface and LRUCacheMultiThreaded is the thread safe implementation of ICache.
+LRUCacheMultiThreaded takes following configurable parameters - "cache size" and "pending queue size". Cache size is self
+explanatory.  "Pending queue size" defines the threshold for number of pending queue task. When pending queue tasks for
+"Cache Purge" (Cache Purge explained below) reaches this limit, cache access will be blocked until pending task count
+drops again.
 
-1) Perform all the get requests and store node access in the queue/ sorted map
-	sorted concurrent hash map will cost log(n) for each get(). So, just use concurrent queue.
+  Detail Design
+Cache access operations are implemented to be quick retrieval or update. This is achieved by decoupling LRU functionality
+from cache access. LRU functionality is implemented by “cache purge” and is explained below. LRUCacheMultiThreaded
+maintains ConcurrentHashMap for the quick access of cache entities. On a get() request, requested entity is quickly
+returned from the map and a non-blocking cache purge task is queued. Similarly, on a put() request, entity is added to
+the map and a non-blocking cache purge task is queued. Cache purge takes care of removing oldest entity when cache size
+reached the provided limit. If multiple threads attempts to add the same entity to the cache, only one will succeed.
 
-2) in the background thread, replay all the get access from the queue on to the LL.
-	Take snapshot of the queue and make a copy.
+Cache Purge:
+ In traditional - non thread safe - LRU cache implementation, DoublyLinkedList is preferred way to maintain access ordering
+ of the cache entities. However, in multi-threaded environment, it is not safe to update LinkedList on the cache access
+threads.  One option is to synchronize LinkedList access but that will result in high lock contention for each get() and
+set() operation. To avoid  lock contention among these operations and still be able to use LinkedList (or other data
+structure) for LRU policy, LinkedList updates are thread confined  to a service thread. Service thread is maintained by
+the cache, instance of LRUCacheMultiThreaded. On each cache access operation, accessed cache entity is queued using
+BlockingQueue, service thread processes these entries one by one and maintains  LRU ordering using linkedList.
+Service thread runs PurgeCacheNotThreadSafe runnable, as mentioned in its name, Purge cache is not thread safe  and is
+not meant for the concurrent access.  
 
-3) What to do with get(), when LL is being updated??
-	get() still keep working normally.
-	put() will block until LL is updated. but block only when current LL is locked.
+Performance: 
+Cache operations - get() and put() - are expected to be constant time depending upon "Pending queue size" threshold. If
+this value is  too small, cache purge will become bottleneck.  
 
-4) update LL
-	1) use a map to remove duplicates.
-	2) create a new LL using the queue.
-
-	Do a full lock on current LL and append:
-	1) append to the new LL from current LL, until limit is reached.
-	2) remove any left over elements from LL and map.
-
-	Dead element: element removed from the map but present in the queue. Remove it from the new LL.
-
-5) put()
-
-fetch.
-add to the map and queue.
-return.
-// Nope: too complicated and will cause contention.
-use a lock on the last item on the LL and do following:
- 	1. update map
-	2. remove and update last item in the current LL.
-update map and append to queue
-
-5. trade off:
-number of items in the map or LL might be more than the limit at any given state. Reserve.
-As a extended goal: implement  immediate LL update when reserve grows after certain limit.
-
-6. things to considered
-on put(), update LL. But don’t do this because lock contention between put() and LL update(). keep put() simple.
-
-
-7. Just use Blocking queue and purge will consume items in the queue and will clean up. Cache just maintains the map and
-purge maintains the LL.
-Cache purge will take map. concurrent hash map will be used by purge and cache. however, purge will only use map when an items
-is being removed from LL (on put which needs to remove old item)
+Testing: 
+TBD

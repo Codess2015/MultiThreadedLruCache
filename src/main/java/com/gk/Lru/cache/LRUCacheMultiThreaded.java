@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Created by gkang on 1/16/17.
  */
-public class LRUCacheMultiThreaded<T extends Comparable<T>> implements ICache<T> {
+public class LRUCacheMultiThreaded<T> implements ICache<T> {
 
     int cacheSize;
     int pendingQueueSize;
@@ -43,8 +43,7 @@ public class LRUCacheMultiThreaded<T extends Comparable<T>> implements ICache<T>
             }
         } catch (InterruptedException ex) {
             destroy();
-
-            // TODO: set interrupt flag of the thread.
+            Thread.currentThread().interrupt();
         }
     }
 
